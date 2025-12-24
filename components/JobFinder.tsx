@@ -18,7 +18,8 @@ import {
   MapPin,
   GraduationCap,
   Heart,
-  Bookmark
+  Bookmark,
+  Zap
 } from 'lucide-react';
 
 interface Props { profile: UserProfile; }
@@ -30,75 +31,101 @@ const JobCard: React.FC<{
   isSaved: boolean, 
   onToggleSave: (job: JobListing) => void,
   index: number 
-}> = ({ job, isSaved, onToggleSave, index }) => (
-  <div 
-    className="group border border-indigo-50 bg-white p-6 rounded-2xl hover:shadow-xl hover:shadow-indigo-500/5 hover:border-indigo-100 transition-all duration-300 relative overflow-hidden animate-fade-in opacity-0"
-    style={{ animationDelay: `${index * 0.05}s`, animationFillMode: 'forwards' }}
-  >
-    <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-50 rounded-full -mr-12 -mt-12 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-2xl"></div>
-    
-    <div className="flex flex-col md:flex-row justify-between items-start gap-6 relative z-10">
-      <div className="flex-1 space-y-3">
-        <div className="flex items-center flex-wrap gap-2">
-          <span className="px-3 py-1 bg-indigo-50 text-indigo-600 text-[10px] font-black rounded-full uppercase tracking-widest border border-indigo-100">
-            {job.category}
-          </span>
-          <span className={`px-3 py-1 text-[10px] font-black rounded-full uppercase tracking-widest border ${job.jobType === 'Full-time' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>
-            {job.jobType}
-          </span>
-          <span className="text-xs text-indigo-300 font-semibold flex items-center">
-            <span className="w-1 h-1 bg-indigo-200 rounded-full mx-2"></span>
-            {job.postedDate}
-          </span>
-        </div>
-        
-        <div className="relative pr-12">
-          <h3 className="text-xl font-extrabold text-indigo-950 group-hover:text-indigo-600 transition-colors leading-tight">
-            {job.title}
-          </h3>
-          <p className="text-indigo-900 font-bold mt-1 text-lg">{job.company}</p>
-          <p className="text-sm text-indigo-400 font-medium flex items-center mt-1">
-            <MapPin className="w-3 h-3 mr-1" /> {job.location}
-          </p>
+}> = ({ job, isSaved, onToggleSave, index }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  
+  // Truncation threshold logic
+  const descriptionText = job.description || "";
+  const needsTruncation = descriptionText.length > 140;
 
-          {/* Absolute Save Button */}
-          <button 
-            onClick={() => onToggleSave(job)}
-            className={`absolute top-0 right-0 p-2.5 rounded-xl border transition-all ${
-              isSaved 
-              ? 'bg-rose-50 border-rose-100 text-rose-500 shadow-sm' 
-              : 'bg-white border-indigo-50 text-indigo-200 hover:text-rose-400 hover:border-rose-100'
-            }`}
+  return (
+    <div 
+      className="group border border-indigo-50 bg-white p-6 rounded-2xl hover:shadow-xl hover:shadow-indigo-500/5 hover:border-indigo-100 transition-all duration-300 relative overflow-hidden animate-fade-in opacity-0"
+      style={{ animationDelay: `${index * 0.05}s`, animationFillMode: 'forwards' }}
+    >
+      <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-50 rounded-full -mr-12 -mt-12 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-2xl"></div>
+      
+      <div className="flex flex-col md:flex-row justify-between items-start gap-6 relative z-10">
+        <div className="flex-1 space-y-3">
+          <div className="flex items-center flex-wrap gap-2">
+            <span className="px-3 py-1 bg-indigo-50 text-indigo-600 text-[10px] font-black rounded-full uppercase tracking-widest border border-indigo-100">
+              {job.category}
+            </span>
+            <span className={`px-3 py-1 text-[10px] font-black rounded-full uppercase tracking-widest border ${job.jobType === 'Full-time' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>
+              {job.jobType}
+            </span>
+            <span className="text-xs text-indigo-300 font-semibold flex items-center">
+              <span className="w-1 h-1 bg-indigo-200 rounded-full mx-2"></span>
+              {job.postedDate}
+            </span>
+          </div>
+          
+          <div className="relative pr-12">
+            <h3 className="text-xl font-extrabold text-indigo-950 group-hover:text-indigo-600 transition-colors leading-tight">
+              {job.title}
+            </h3>
+            <p className="text-indigo-900 font-bold mt-1 text-lg">{job.company}</p>
+            <p className="text-sm text-indigo-400 font-medium flex items-center mt-1">
+              <MapPin className="w-3 h-3 mr-1" /> {job.location}
+            </p>
+
+            {/* Absolute Save Button */}
+            <button 
+              onClick={() => onToggleSave(job)}
+              className={`absolute top-0 right-0 p-2.5 rounded-xl border transition-all ${
+                isSaved 
+                ? 'bg-rose-50 border-rose-100 text-rose-500 shadow-sm' 
+                : 'bg-white border-indigo-50 text-indigo-200 hover:text-rose-400 hover:border-rose-100'
+              }`}
+            >
+              <Heart className={`w-5 h-5 ${isSaved ? 'fill-current' : ''}`} />
+            </button>
+          </div>
+
+          {descriptionText && (
+            <div className="space-y-2 mt-4">
+              <div className={`relative transition-all duration-300 ease-in-out`}>
+                <p className={`text-sm text-indigo-900/60 leading-relaxed italic border-l-2 border-indigo-100 pl-4 py-1 ${!isExpanded ? 'line-clamp-2' : ''}`}>
+                  "{descriptionText}"
+                </p>
+              </div>
+              
+              {needsTruncation && (
+                <button 
+                  onClick={() => setIsExpanded(!isExpanded)}
+                  className="text-[10px] font-black text-indigo-400 uppercase tracking-widest hover:text-indigo-600 transition-colors pl-4 flex items-center gap-1 group/expand"
+                >
+                  {isExpanded ? (
+                    <>Show Less <ChevronDown className="w-3 h-3 rotate-180 transition-transform duration-300" /></>
+                  ) : (
+                    <>Read More <ChevronDown className="w-3 h-3 transition-transform duration-300" /></>
+                  )}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="w-full md:w-auto flex flex-col gap-2">
+          <a 
+            href={job.url} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="flex items-center justify-center bg-indigo-950 text-white px-6 py-4 rounded-xl hover:bg-indigo-800 transition-all shadow-md group-hover:scale-[1.02] active:scale-95 font-bold text-sm tracking-widest uppercase"
           >
-            <Heart className={`w-5 h-5 ${isSaved ? 'fill-current' : ''}`} />
-          </button>
+            Apply Now
+            <ExternalLink className="w-4 h-4 ml-2" />
+          </a>
         </div>
-
-        {job.description && (
-          <p className="text-sm text-indigo-900/60 leading-relaxed line-clamp-2 italic border-l-2 border-indigo-100 pl-4 py-1">
-            "{job.description}"
-          </p>
-        )}
-      </div>
-
-      <div className="w-full md:w-auto flex flex-col gap-2">
-        <a 
-          href={job.url} 
-          target="_blank" 
-          rel="noopener noreferrer"
-          className="flex items-center justify-center bg-indigo-950 text-white px-6 py-4 rounded-xl hover:bg-indigo-800 transition-all shadow-md group-hover:scale-[1.02] active:scale-95 font-bold text-sm tracking-widest uppercase"
-        >
-          Apply Now
-          <ExternalLink className="w-4 h-4 ml-2" />
-        </a>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 const JobFinder: React.FC<Props> = ({ profile }) => {
   const [listings, setListings] = useState<JobListing[]>([]);
   const [sources, setSources] = useState<GroundingUrl[]>([]);
+  const [lastScanned, setLastScanned] = useState<Date | null>(null);
   const [savedJobs, setSavedJobs] = useState<JobListing[]>(() => {
     const stored = localStorage.getItem(`saved_jobs_${profile.name}`);
     return stored ? JSON.parse(stored) : [];
@@ -127,6 +154,7 @@ const JobFinder: React.FC<Props> = ({ profile }) => {
       const data = await findInternshipOpportunities(profile);
       setListings(data.listings);
       setSources(data.sources);
+      setLastScanned(new Date());
     } catch (error) {
       console.error("Error finding jobs:", error);
     } finally {
@@ -207,9 +235,12 @@ const JobFinder: React.FC<Props> = ({ profile }) => {
                   {viewSavedOnly ? 'My Bookmarks' : (isSenior ? 'Career Launch' : 'Internship Scout')}
                 </h2>
               </div>
-              <p className="text-indigo-200/80 text-sm font-medium mb-4">
-                {viewSavedOnly ? `Reviewing your ${savedJobs.length} bookmarked opportunities.` : `Real-time scanning for ${profile.concentration} roles.`}
-              </p>
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
+                <p className="text-emerald-400 text-[10px] font-black uppercase tracking-[0.2em]">
+                  {loading ? 'Synchronizing Live Feed...' : (lastScanned ? `Last Scanned: ${lastScanned.toLocaleTimeString()}` : 'Ready for Protocol')}
+                </p>
+              </div>
               
               {/* Search Criteria Visualization */}
               <div className="flex flex-wrap gap-2">
@@ -351,6 +382,10 @@ const JobFinder: React.FC<Props> = ({ profile }) => {
                <div className="text-center space-y-2">
                  <h3 className="text-indigo-950 font-black text-xl uppercase tracking-widest">Scanning Networks</h3>
                  <p className="text-indigo-400 text-sm font-medium">Hunting for {profile.concentration} roles in {profile.preferredCities}...</p>
+                 <div className="flex items-center justify-center gap-2 mt-4">
+                    <Zap className="w-3 h-3 text-emerald-500" />
+                    <span className="text-[10px] font-black text-indigo-300 uppercase tracking-widest">Autonomous Scout Active</span>
+                 </div>
                </div>
             </div>
           ) : filteredAndSorted.length > 0 ? (

@@ -1,9 +1,9 @@
 
 import React, { useState } from 'react';
-import { analyzeResume, generateSpeech } from '../services/geminiService';
+import { analyzeResume, generateSpeech, redactSensitiveInfo } from '../services/geminiService';
 import { playRawAudio } from '../services/audioHelper';
 import { UserProfile } from '../types';
-import { Upload, FileText, Check, Loader2, Volume2 } from 'lucide-react';
+import { Upload, FileText, Check, Loader2, Volume2, ShieldCheck, Sparkles } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 interface Props {
@@ -15,6 +15,7 @@ const ResumeAnalyzer: React.FC<Props> = ({ profile }) => {
   const [textInput, setTextInput] = useState('');
   const [feedback, setFeedback] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
+  const [protecting, setProtecting] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [mode, setMode] = useState<'upload' | 'paste'>('upload');
 
@@ -32,6 +33,15 @@ const ResumeAnalyzer: React.FC<Props> = ({ profile }) => {
     try {
       let fileBase64 = undefined;
       let mimeType = undefined;
+      let targetText = textInput;
+
+      // STEP 1: AI DATA PROTECTION
+      setProtecting(true);
+      if (mode === 'paste' && textInput) {
+        targetText = await redactSensitiveInfo(textInput);
+        setTextInput(targetText); // Update UI to show redacted version
+      }
+      setProtecting(false);
 
       if (file && mode === 'upload') {
         const reader = new FileReader();
@@ -51,7 +61,7 @@ const ResumeAnalyzer: React.FC<Props> = ({ profile }) => {
         profile,
         fileBase64,
         mimeType,
-        mode === 'paste' ? textInput : undefined
+        mode === 'paste' ? targetText : undefined
       );
       setFeedback(result);
     } catch (error) {
@@ -59,6 +69,7 @@ const ResumeAnalyzer: React.FC<Props> = ({ profile }) => {
       setFeedback("Something went wrong analyzing the resume. Please try again.");
     } finally {
       setAnalyzing(false);
+      setProtecting(false);
     }
   };
 
@@ -77,45 +88,65 @@ const ResumeAnalyzer: React.FC<Props> = ({ profile }) => {
 
   return (
     <div className="space-y-6">
-      <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
-        <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center">
-            <FileText className="mr-2 h-6 w-6 text-emerald-600"/> Resume Review
+      <div className="bg-white p-10 rounded-[2.5rem] shadow-xl border border-indigo-50 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-full blur-2xl -mr-16 -mt-16"></div>
+        
+        <h2 className="text-3xl font-black text-indigo-950 mb-6 flex items-center italic uppercase tracking-tight">
+            <div className="bg-indigo-950 p-3 rounded-2xl mr-4 shadow-lg">
+              <FileText className="h-6 w-6 text-emerald-400"/>
+            </div>
+            Resume Review
         </h2>
 
         {analyzing ? (
-          <div className="flex flex-col items-center justify-center py-12 space-y-6">
-            <Loader2 className="h-12 w-12 text-emerald-600 animate-spin" />
-            <div className="text-center space-y-2">
-              <h3 className="text-xl font-semibold text-gray-800">Analyzing Resume...</h3>
-              <p className="text-gray-500">
-                Gemini Vision is reviewing your content against {profile.classYear} standards.
+          <div className="flex flex-col items-center justify-center py-20 space-y-8">
+            <div className="relative">
+               <div className="h-24 w-24 border-8 border-indigo-50 border-t-emerald-500 rounded-full animate-spin"></div>
+               {protecting && (
+                 <div className="absolute inset-0 flex items-center justify-center animate-pulse">
+                   <ShieldCheck className="h-8 w-8 text-emerald-600" />
+                 </div>
+               )}
+            </div>
+            <div className="text-center space-y-3">
+              <h3 className="text-2xl font-black text-indigo-950 uppercase tracking-widest">
+                {protecting ? 'Privacy Shield Active' : 'Analyzing Layout'}
+              </h3>
+              <p className="text-indigo-400 font-bold max-w-sm mx-auto">
+                {protecting 
+                  ? "Gemini is intelligently redacting your PII (phone, email) before analysis..."
+                  : `Evaluating your experience against ${profile.classYear} recruiting benchmarks.`}
               </p>
             </div>
           </div>
         ) : (
           <>
-            <p className="text-gray-600 mb-6">
-              Upload your resume (PDF/Image) or paste the text. I'll review it against {profile.classYear} standards using visual analysis.
-            </p>
+            <div className="bg-indigo-50/50 p-5 rounded-2xl border border-indigo-100 flex items-center gap-4 mb-8">
+               <ShieldCheck className="w-5 h-5 text-emerald-600" />
+               <p className="text-xs text-indigo-900 font-bold">
+                 <span className="uppercase text-[10px] tracking-widest text-emerald-700 mr-2">Automatic Protection:</span>
+                 Sensitive data will be scrubbed before processing.
+               </p>
+            </div>
 
-            <div className="flex space-x-4 mb-6">
+            <div className="flex space-x-2 mb-8 bg-indigo-50/50 p-1.5 rounded-2xl w-fit">
               <button 
                 onClick={() => setMode('upload')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${mode === 'upload' ? 'bg-emerald-100 text-emerald-800' : 'text-gray-600 hover:bg-gray-100'}`}
+                className={`px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${mode === 'upload' ? 'bg-white text-indigo-950 shadow-md' : 'text-indigo-400 hover:text-indigo-600'}`}
               >
-                Upload File
+                Upload Document
               </button>
               <button 
                 onClick={() => setMode('paste')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${mode === 'paste' ? 'bg-emerald-100 text-emerald-800' : 'text-gray-600 hover:bg-gray-100'}`}
+                className={`px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${mode === 'paste' ? 'bg-white text-indigo-950 shadow-md' : 'text-indigo-400 hover:text-indigo-600'}`}
               >
-                Paste Text
+                Paste Content
               </button>
             </div>
 
-            <div className="mb-6">
+            <div className="mb-8">
               {mode === 'upload' ? (
-                <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-black transition-colors">
+                <div className="border-4 border-dashed border-indigo-50 rounded-[2rem] p-12 text-center hover:border-emerald-200 transition-all group bg-indigo-50/10">
                   <input 
                     type="file" 
                     id="resume-upload" 
@@ -124,46 +155,61 @@ const ResumeAnalyzer: React.FC<Props> = ({ profile }) => {
                     onChange={handleFileChange}
                   />
                   <label htmlFor="resume-upload" className="cursor-pointer flex flex-col items-center">
-                    <Upload className="h-10 w-10 text-gray-400 mb-3" />
-                    <span className="text-sm text-gray-600 font-medium">
-                      {file ? file.name : "Click to upload PDF or Image"}
+                    <div className="bg-white p-5 rounded-[1.5rem] shadow-xl group-hover:scale-110 transition-transform mb-6 border border-indigo-50">
+                      <Upload className="h-8 w-8 text-indigo-300" />
+                    </div>
+                    <span className="text-base font-black text-indigo-950 uppercase tracking-widest">
+                      {file ? file.name : "Select Resume PDF/IMG"}
                     </span>
+                    <p className="text-xs text-indigo-300 font-bold mt-2">Max 5MB. Visual analysis supported.</p>
                   </label>
                 </div>
               ) : (
-                <textarea
-                  className="w-full h-48 border border-gray-300 rounded-lg p-4 focus:ring-2 focus:ring-black caret-black text-black focus:outline-none"
-                  placeholder="Paste your resume content here..."
-                  value={textInput}
-                  onChange={(e) => setTextInput(e.target.value)}
-                />
+                <div className="relative">
+                  <textarea
+                    className="w-full h-64 bg-indigo-50/30 border-2 border-indigo-50 rounded-[2rem] p-8 text-sm text-indigo-950 font-bold leading-relaxed focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all resize-none"
+                    placeholder="Paste your professional experience summary here..."
+                    value={textInput}
+                    onChange={(e) => setTextInput(e.target.value)}
+                  />
+                  <div className="absolute top-4 right-4 text-[10px] font-black text-indigo-200 uppercase tracking-widest">
+                    AI Redaction Enabled
+                  </div>
+                </div>
               )}
             </div>
 
             <button
               onClick={handleAnalyze}
               disabled={(!file && !textInput)}
-              className="w-full bg-black text-white py-3 rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50 transition-colors flex justify-center items-center"
+              className="w-full bg-indigo-950 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-emerald-600 transition-all shadow-2xl shadow-indigo-950/20 active:scale-95 disabled:opacity-50 flex justify-center items-center gap-3"
             >
-              Analyze Resume
+              <Sparkles className="w-4 h-4 text-emerald-400" />
+              Analyze with Privacy Guard
             </button>
           </>
         )}
       </div>
 
       {feedback && !analyzing && (
-        <div className="bg-white p-6 rounded-xl shadow-lg border border-emerald-100 animate-fade-in relative">
+        <div className="bg-white p-10 rounded-[2.5rem] shadow-xl border border-emerald-100 animate-fade-in relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-2 h-full bg-emerald-500"></div>
+          
           <button 
             onClick={handleSpeak}
             disabled={speaking}
-            className={`absolute top-6 right-6 p-2 rounded-full border border-emerald-100 transition-all hover:bg-emerald-50 ${speaking ? 'text-emerald-600 animate-pulse' : 'text-gray-400'}`}
+            className={`absolute top-8 right-8 p-3 rounded-2xl border transition-all hover:scale-110 ${speaking ? 'bg-emerald-50 text-emerald-600 border-emerald-200 animate-pulse' : 'bg-indigo-50 text-indigo-300 border-indigo-100'}`}
           >
-            <Volume2 className="w-5 h-5" />
+            <Volume2 className="w-6 h-6" />
           </button>
-          <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
-            <Check className="mr-2 h-5 w-5 text-emerald-600" /> Feedback
+          
+          <h3 className="text-2xl font-black text-indigo-950 mb-8 flex items-center italic uppercase tracking-tight">
+            <Check className="mr-3 h-6 w-6 text-emerald-500" /> Improvement Strategy
           </h3>
-          <div className="prose prose-emerald max-w-none text-gray-700">
+          
+          <div className="prose prose-indigo max-w-none text-indigo-900/80 font-medium leading-relaxed
+            prose-headings:text-indigo-950 prose-headings:font-black prose-headings:uppercase prose-headings:tracking-widest prose-headings:mt-8 prose-headings:mb-4
+            prose-li:marker:text-emerald-500 prose-li:my-1 prose-ul:my-4 prose-p:my-2">
             <ReactMarkdown>{feedback}</ReactMarkdown>
           </div>
         </div>

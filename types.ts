@@ -33,6 +33,8 @@ export interface AlumniProfile {
   advice: string;
   skidmoreConnection: string; // e.g., "Former Peer Mentor", "Career Jam Speaker"
   linkedInUrl?: string;
+  email?: string;
+  isUrlVerified: boolean; // True if it's a direct /in/ link, false if it's a search fallback
 }
 
 export interface InternshipPlanItem {

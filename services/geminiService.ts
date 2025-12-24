@@ -4,20 +4,62 @@ import { InternshipPlan, UserProfile, MapLocation, GroundingUrl, JobListing, Alu
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-const SYSTEM_INSTRUCTION_BASE = `
-You are a savvy Senior Management & Business major at Skidmore College acting as a career coach.
-You know the ins and outs of Skidmore's Career Development Center (CDC), Handshake, and the specific recruiting timelines for different industries.
-You are encouraging but realistic. Context: Current Date is Late November 2025. You are focusing on Summer 2026 placements.
+const AGENT_FORCE_SYSTEM_INSTRUCTION = `
+SYSTEM_LEVEL: SKIDMORE_THOROUGHBRED_STRATEGIST
+PERSONA: You are the "Skidmore Thoroughbred Strategist". 
+ROLE: You operate at a professional executive level, blending the savvy of a Skidmore Business Alum with the data-driven precision of a Tier-1 Management Consultant.
+MISSION: Your objective is to ensure the user (a Skidmore student) secures a high-impact Summer 2026 internship or post-grad placement.
+CONTEXT: Current Date: November 2025. 
+GUIDELINES:
+1. ALWAYS prioritize real-time, live data from late 2025 and 2026 cycles.
+2. If using Search, verify links are active and deadlines are current.
+3. Use "Mission Objectives" and "Strategic Insights" instead of general advice.
+4. Reference Skidmore-specific assets (Handshake, CDC, Career Jam) as high-value resources.
+5. If a student is behind, do not sugarcoat; provide a high-velocity recovery plan.
+6. Ensure all generated URLs are valid and point to legitimate career portals.
+7. For alumni, find real people with active, verified LinkedIn presence.
+8. LINKEDIN & EMAIL ACCURACY: Accuracy is the top priority. Hallucinated /in/ URLs that lead to 404 errors are strictly prohibited.
+9. OUTREACH DATA: For every alum, find or construct a professional email address or a valid Skidmore alumni alias (e.g. j_doe@skidmore.edu).
+10. JSON STRICTURE: When outputting JSON with search grounding, do NOT include grounding citations (like [1], [2]) inside the JSON string values. Only valid JSON.
 `;
+
+/**
+ * Data Protection API: Redacts PII from sensitive strings
+ */
+export const redactSensitiveInfo = async (text: string): Promise<string> => {
+  const prompt = `
+    ACT AS A PRIVACY PROTECTION AGENT.
+    Read the following resume/text and redact all Personally Identifiable Information (PII).
+    Specifically replace:
+    - Phone numbers with [PHONE]
+    - Specific street addresses with [ADDRESS]
+    - Personal emails with [EMAIL]
+    - Last names with [INITIAL] (e.g. John Doe -> John D.)
+    
+    Retain all professional content, skills, work history, and Skidmore-related info.
+    Only return the redacted text.
+    
+    Text: ${text}
+  `;
+
+  const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: prompt,
+    config: {
+      systemInstruction: "You are a data privacy specialist. Your task is to scrub PII while keeping professional data intact."
+    },
+  });
+
+  return response.text || text;
+};
 
 export const generateInternshipPlan = async (profile: UserProfile): Promise<InternshipPlan> => {
   const prompt = `
-    Create a detailed 12-16 week internship search plan for a ${profile.classYear} Skidmore student targeting Summer 2026 internships.
-    Major Concentration: ${profile.concentration}
-    GPA: ${profile.gpa}
-    Interests: ${profile.interests}
-    Target Cities: ${profile.preferredCities}
-
+    Create a high-impact Strategic Plan for a ${profile.classYear} Skidmore student.
+    Major: ${profile.concentration}
+    Target: Summer 2026 internships.
+    Current Month: November 2025.
+    
     Return ONLY JSON.
   `;
 
@@ -48,7 +90,7 @@ export const generateInternshipPlan = async (profile: UserProfile): Promise<Inte
     model: "gemini-3-pro-preview",
     contents: prompt,
     config: {
-      systemInstruction: SYSTEM_INSTRUCTION_BASE,
+      systemInstruction: AGENT_FORCE_SYSTEM_INSTRUCTION,
       responseMimeType: "application/json",
       responseSchema: responseSchema,
       thinkingConfig: { thinkingBudget: 32768 }, 
@@ -58,13 +100,28 @@ export const generateInternshipPlan = async (profile: UserProfile): Promise<Inte
   return JSON.parse(response.text || "{}") as InternshipPlan;
 };
 
-export const getAlumniProfiles = async (major: string): Promise<AlumniProfile[]> => {
+export const getQuickTip = async (interests: string): Promise<string> => {
+  const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: `Mission Objective: Generate a high-velocity 1-sentence career insight for a student focused on: ${interests}. Prioritize 2026 recruiting cycle data. Start directly with the tip.`,
+    config: {
+      systemInstruction: AGENT_FORCE_SYSTEM_INSTRUCTION,
+    },
+  });
+  return response.text?.trim() || "Strategy: Maintain peak networking frequency and stay proactive.";
+};
+
+export const getAlumniProfiles = async (major: string): Promise<{ profiles: AlumniProfile[]; sources: GroundingUrl[] }> => {
   const prompt = `
-    Generate 4 diverse and realistic alumni profiles for a Skidmore College major in "${major}".
-    Base these on common career outcomes for Skidmore grads (e.g., MB majors often go to Finance or Creative agencies; Art majors to Galleries or UX; Psych to HR or research).
-    Include one recent grad (2022-2024) and one more senior alum.
-    For each, include a realistic LinkedIn URL like https://www.linkedin.com/in/name-skidmore.
-    Return ONLY JSON.
+    MISSION: Find 4 REAL Skidmore College alumni who graduated with a major or focus in "${major}".
+    
+    LINKEDIN & OUTREACH PROTOCOL:
+    1. Use Google Search tool to find actual individuals and verify their connection to Skidmore.
+    2. DIRECT PROFILE: If you find a 100% verified direct profile URL (e.g., https://www.linkedin.com/in/username), use it and set isUrlVerified to true.
+    3. SEARCH FALLBACK: If direct URL is missing, construct: https://www.linkedin.com/search/results/all/?keywords=[Person+Full+Name]+Skidmore+College and set isUrlVerified to false.
+    4. EMAIL: Identify a professional email or Skidmore alumni email alias for each person.
+    
+    STRICT JSON OUTPUT. NO CITATIONS IN THE TEXT.
   `;
 
   const responseSchema = {
@@ -81,9 +138,11 @@ export const getAlumniProfiles = async (major: string): Promise<AlumniProfile[]>
         pathway: { type: Type.ARRAY, items: { type: Type.STRING } },
         advice: { type: Type.STRING },
         skidmoreConnection: { type: Type.STRING },
-        linkedInUrl: { type: Type.STRING }
+        linkedInUrl: { type: Type.STRING },
+        email: { type: Type.STRING },
+        isUrlVerified: { type: Type.BOOLEAN }
       },
-      required: ["name", "classYear", "major", "currentRole", "company", "location", "pathway", "advice", "skidmoreConnection", "linkedInUrl"]
+      required: ["name", "classYear", "major", "currentRole", "company", "location", "pathway", "advice", "skidmoreConnection", "linkedInUrl", "email", "isUrlVerified"]
     }
   };
 
@@ -91,13 +150,25 @@ export const getAlumniProfiles = async (major: string): Promise<AlumniProfile[]>
     model: "gemini-3-pro-preview",
     contents: prompt,
     config: {
-      systemInstruction: SYSTEM_INSTRUCTION_BASE,
+      systemInstruction: AGENT_FORCE_SYSTEM_INSTRUCTION,
+      tools: [{ googleSearch: {} }],
       responseMimeType: "application/json",
       responseSchema: responseSchema,
+      thinkingConfig: { thinkingBudget: 32768 },
     },
   });
 
-  return JSON.parse(response.text || "[]") as AlumniProfile[];
+  const sources: GroundingUrl[] = [];
+  response.candidates?.[0]?.groundingMetadata?.groundingChunks?.forEach((chunk: any) => {
+    if (chunk.web?.uri) sources.push({ uri: chunk.web.uri, title: chunk.web.title });
+  });
+
+  try {
+    const profiles = JSON.parse(response.text || "[]");
+    return { profiles, sources };
+  } catch (e) {
+    return { profiles: [], sources };
+  }
 };
 
 export const analyzeResume = async (
@@ -111,18 +182,21 @@ export const analyzeResume = async (
   if (textContext) parts.push({ text: `Resume Text:\n${textContext}` });
 
   const prompt = `
-    Analyze this resume for a ${profile.classYear} targeting ${profile.concentration} internships for Summer 2026.
-    Provide 3 improvements for Skidmore CDC standards.
+    STRATEGIC ANALYSIS: Provide a strategic critique of this resume for Summer 2026 placement.
+    Use H3 headings for categories. Use bolding for elite keywords.
   `;
   parts.push({ text: prompt });
 
   const response = await ai.models.generateContent({
     model: "gemini-3-pro-preview",
     contents: { parts },
-    config: { systemInstruction: SYSTEM_INSTRUCTION_BASE },
+    config: { 
+      systemInstruction: AGENT_FORCE_SYSTEM_INSTRUCTION,
+      thinkingConfig: { thinkingBudget: 32768 }
+    },
   });
 
-  return response.text || "Could not analyze resume.";
+  return response.text || "Analysis failed.";
 };
 
 export const chatWithCoach = async (history: { role: string; parts: { text: string }[] }[], newMessage: string) => {
@@ -130,7 +204,8 @@ export const chatWithCoach = async (history: { role: string; parts: { text: stri
     model: "gemini-3-pro-preview",
     history: history,
     config: {
-      systemInstruction: SYSTEM_INSTRUCTION_BASE + " Keep answers concise. Focus on Late Nov 2025 context.",
+      systemInstruction: AGENT_FORCE_SYSTEM_INSTRUCTION,
+      thinkingConfig: { thinkingBudget: 32768 }
     },
   });
   const result = await chat.sendMessage({ message: newMessage });
@@ -140,7 +215,7 @@ export const chatWithCoach = async (history: { role: string; parts: { text: stri
 export const searchIndustryTrends = async (query: string): Promise<{ text: string; sources: GroundingUrl[] }> => {
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
-    contents: `Find 2026 trends for: ${query}. Date: Nov 2025.`,
+    contents: `STRATEGIC RECON: Execute industry scan for: ${query}. Focus on data from November 2025 onwards.`,
     config: { tools: [{ googleSearch: {} }] },
   });
 
@@ -152,33 +227,34 @@ export const searchIndustryTrends = async (query: string): Promise<{ text: strin
   return { text: response.text || "", sources };
 };
 
-export const findCompaniesInCity = async (industry: string, city: string): Promise<{ text: string; locations: MapLocation[] }> => {
+export const findCompaniesInCity = async (concentration: string, city: string): Promise<{ text: string; locations: MapLocation[] }> => {
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash",
-    contents: `Find ${industry} firms in ${city}.`,
-    config: { tools: [{ googleMaps: {} }] },
+    contents: `Strategic Recon: Identify high-impact companies and organizations for ${concentration} professionals in ${city}. Focus on current top employers in late 2025.`,
+    config: {
+      tools: [{ googleMaps: {} }],
+    },
   });
-  return { text: response.text || "", locations: [] };
+
+  const locations: MapLocation[] = [];
+  response.candidates?.[0]?.groundingMetadata?.groundingChunks?.forEach((chunk: any) => {
+    if (chunk.maps) {
+      locations.push({
+        name: chunk.maps.title,
+        address: "", 
+        uri: chunk.maps.uri
+      });
+    }
+  });
+
+  return { text: response.text || "Reconnaissance complete.", locations };
 };
 
 export const findInternshipOpportunities = async (profile: UserProfile): Promise<{ listings: JobListing[]; sources: GroundingUrl[] }> => {
-  const isSenior = profile.classYear === 'Senior';
   const prompt = `
-    Context: Late November 2025.
-    User Profile: ${profile.classYear}, ${profile.concentration} major, Interests: ${profile.interests}, Cities: ${profile.preferredCities}.
-    
-    ${isSenior 
-      ? "As a SENIOR, find BOTH active Summer 2026 Post-Grad Internships AND Entry-Level Full-Time Jobs (roles starting Summer 2026)." 
-      : "Find active Summer 2026 Internship listings."
-    }
-
-    Find 8-10 active listings.
-    Categories MUST be one of: Finance, Marketing, Management, Accounting, Analytics, Sales, HR, Consulting, or Other.
-    Prioritize direct ATS links (Greenhouse, Lever, LinkedIn Direct).
-    For "jobType", use "Internship" or "Full-time".
-    For "daysAgo", use an integer representing how many days ago it was posted (0 for today, 1 for yesterday, etc.).
-
-    Return as JSON list of JobListing objects.
+    MISSION RECON: Search for active Summer 2026 ${profile.concentration} internships in ${profile.preferredCities}.
+    Search date: November 2025. Verify all listings are still active and accepting applications.
+    STRICT JSON OUTPUT. NO CITATIONS IN THE TEXT VALUES.
   `;
 
   const responseSchema = {
@@ -220,36 +296,25 @@ export const findInternshipOpportunities = async (profile: UserProfile): Promise
     const listings = JSON.parse(response.text || "[]");
     return { listings, sources };
   } catch (e) {
+    console.error("JSON parsing error for job listings:", e);
     return { listings: [], sources };
   }
 };
 
-export const getQuickTip = async (topic: string): Promise<string> => {
-  const response = await ai.models.generateContent({
-    model: "gemini-flash-lite-latest",
-    contents: `One short unconventional tip for: ${topic}. Max 15 words.`,
-  });
-  return response.text || "Network early.";
-};
-
-/**
- * TTS implementation using gemini-2.5-flash-preview-tts
- */
 export const generateSpeech = async (text: string): Promise<string> => {
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash-preview-tts",
-    contents: [{ parts: [{ text: `Say encouragingly as a college mentor: ${text}` }] }],
+    contents: [{ parts: [{ text: `Say with executive authority and clarity: ${text}` }] }],
     config: {
       responseModalities: [Modality.AUDIO],
       speechConfig: {
         voiceConfig: {
-          prebuiltVoiceConfig: { voiceName: 'Kore' }, // Warm, helpful voice
+          prebuiltVoiceConfig: { voiceName: 'Zephyr' },
         },
       },
     },
   });
 
   const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-  if (!base64Audio) throw new Error("No audio returned from TTS");
-  return base64Audio;
+  return base64Audio || "";
 };
