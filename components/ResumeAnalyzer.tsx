@@ -1,7 +1,9 @@
+
 import React, { useState } from 'react';
-import { analyzeResume } from '../services/geminiService';
+import { analyzeResume, generateSpeech } from '../services/geminiService';
+import { playRawAudio } from '../services/audioHelper';
 import { UserProfile } from '../types';
-import { Upload, FileText, Check, AlertCircle, Loader2 } from 'lucide-react';
+import { Upload, FileText, Check, Loader2, Volume2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 interface Props {
@@ -13,6 +15,7 @@ const ResumeAnalyzer: React.FC<Props> = ({ profile }) => {
   const [textInput, setTextInput] = useState('');
   const [feedback, setFeedback] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
   const [mode, setMode] = useState<'upload' | 'paste'>('upload');
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -35,7 +38,6 @@ const ResumeAnalyzer: React.FC<Props> = ({ profile }) => {
         const base64Promise = new Promise<string>((resolve) => {
           reader.onload = (e) => {
             const result = e.target?.result as string;
-            // Strip the Data URL prefix to get raw base64
             const base64 = result.split(',')[1];
             resolve(base64);
           };
@@ -60,6 +62,19 @@ const ResumeAnalyzer: React.FC<Props> = ({ profile }) => {
     }
   };
 
+  const handleSpeak = async () => {
+    if (speaking || !feedback) return;
+    setSpeaking(true);
+    try {
+      const audioBase64 = await generateSpeech(feedback.substring(0, 1000));
+      await playRawAudio(audioBase64);
+    } catch (error) {
+      console.error("Speech failed", error);
+    } finally {
+      setSpeaking(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
@@ -75,23 +90,6 @@ const ResumeAnalyzer: React.FC<Props> = ({ profile }) => {
               <p className="text-gray-500">
                 Gemini Vision is reviewing your content against {profile.classYear} standards.
               </p>
-            </div>
-            
-            <div className="bg-gray-50 rounded-lg p-4 border border-gray-100 w-full max-w-sm">
-              <div className="flex justify-between items-center mb-2 pb-2 border-b border-gray-200">
-                 <span className="text-sm text-gray-500">Input Mode</span>
-                 <span className="text-sm font-medium text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded">
-                    {mode === 'upload' ? 'File Upload' : 'Text Paste'}
-                 </span>
-              </div>
-              {mode === 'upload' && file && (
-                <div className="flex justify-between items-center">
-                   <span className="text-sm text-gray-500">File Name</span>
-                   <span className="text-sm font-medium text-gray-700 truncate max-w-[180px]" title={file.name}>
-                    {file.name}
-                   </span>
-                </div>
-              )}
             </div>
           </div>
         ) : (
@@ -154,7 +152,14 @@ const ResumeAnalyzer: React.FC<Props> = ({ profile }) => {
       </div>
 
       {feedback && !analyzing && (
-        <div className="bg-white p-6 rounded-xl shadow-lg border border-emerald-100 animate-fade-in">
+        <div className="bg-white p-6 rounded-xl shadow-lg border border-emerald-100 animate-fade-in relative">
+          <button 
+            onClick={handleSpeak}
+            disabled={speaking}
+            className={`absolute top-6 right-6 p-2 rounded-full border border-emerald-100 transition-all hover:bg-emerald-50 ${speaking ? 'text-emerald-600 animate-pulse' : 'text-gray-400'}`}
+          >
+            <Volume2 className="w-5 h-5" />
+          </button>
           <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
             <Check className="mr-2 h-5 w-5 text-emerald-600" /> Feedback
           </h3>

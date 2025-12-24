@@ -1,6 +1,6 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
-import { InternshipPlan, UserProfile, MapLocation, GroundingUrl, JobListing } from "../types";
+import { GoogleGenAI, Type, Modality } from "@google/genai";
+import { InternshipPlan, UserProfile, MapLocation, GroundingUrl, JobListing, AlumniProfile } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -58,6 +58,48 @@ export const generateInternshipPlan = async (profile: UserProfile): Promise<Inte
   return JSON.parse(response.text || "{}") as InternshipPlan;
 };
 
+export const getAlumniProfiles = async (major: string): Promise<AlumniProfile[]> => {
+  const prompt = `
+    Generate 4 diverse and realistic alumni profiles for a Skidmore College major in "${major}".
+    Base these on common career outcomes for Skidmore grads (e.g., MB majors often go to Finance or Creative agencies; Art majors to Galleries or UX; Psych to HR or research).
+    Include one recent grad (2022-2024) and one more senior alum.
+    For each, include a realistic LinkedIn URL like https://www.linkedin.com/in/name-skidmore.
+    Return ONLY JSON.
+  `;
+
+  const responseSchema = {
+    type: Type.ARRAY,
+    items: {
+      type: Type.OBJECT,
+      properties: {
+        name: { type: Type.STRING },
+        classYear: { type: Type.STRING },
+        major: { type: Type.STRING },
+        currentRole: { type: Type.STRING },
+        company: { type: Type.STRING },
+        location: { type: Type.STRING },
+        pathway: { type: Type.ARRAY, items: { type: Type.STRING } },
+        advice: { type: Type.STRING },
+        skidmoreConnection: { type: Type.STRING },
+        linkedInUrl: { type: Type.STRING }
+      },
+      required: ["name", "classYear", "major", "currentRole", "company", "location", "pathway", "advice", "skidmoreConnection", "linkedInUrl"]
+    }
+  };
+
+  const response = await ai.models.generateContent({
+    model: "gemini-3-pro-preview",
+    contents: prompt,
+    config: {
+      systemInstruction: SYSTEM_INSTRUCTION_BASE,
+      responseMimeType: "application/json",
+      responseSchema: responseSchema,
+    },
+  });
+
+  return JSON.parse(response.text || "[]") as AlumniProfile[];
+};
+
 export const analyzeResume = async (
   profile: UserProfile,
   fileBase64?: string,
@@ -97,7 +139,7 @@ export const chatWithCoach = async (history: { role: string; parts: { text: stri
 
 export const searchIndustryTrends = async (query: string): Promise<{ text: string; sources: GroundingUrl[] }> => {
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
+    model: "gemini-3-flash-preview",
     contents: `Find 2026 trends for: ${query}. Date: Nov 2025.`,
     config: { tools: [{ googleSearch: {} }] },
   });
@@ -120,13 +162,20 @@ export const findCompaniesInCity = async (industry: string, city: string): Promi
 };
 
 export const findInternshipOpportunities = async (profile: UserProfile): Promise<{ listings: JobListing[]; sources: GroundingUrl[] }> => {
+  const isSenior = profile.classYear === 'Senior';
   const prompt = `
-    Context: Late November 2025. Finding Summer 2026 Internships.
+    Context: Late November 2025.
     User Profile: ${profile.classYear}, ${profile.concentration} major, Interests: ${profile.interests}, Cities: ${profile.preferredCities}.
+    
+    ${isSenior 
+      ? "As a SENIOR, find BOTH active Summer 2026 Post-Grad Internships AND Entry-Level Full-Time Jobs (roles starting Summer 2026)." 
+      : "Find active Summer 2026 Internship listings."
+    }
 
-    Find 6-8 active internship listings.
+    Find 8-10 active listings.
     Categories MUST be one of: Finance, Marketing, Management, Accounting, Analytics, Sales, HR, Consulting, or Other.
-    Prioritize direct ATS links (Greenhouse, Lever, etc.).
+    Prioritize direct ATS links (Greenhouse, Lever, LinkedIn Direct).
+    For "jobType", use "Internship" or "Full-time".
     For "daysAgo", use an integer representing how many days ago it was posted (0 for today, 1 for yesterday, etc.).
 
     Return as JSON list of JobListing objects.
@@ -146,13 +195,14 @@ export const findInternshipOpportunities = async (profile: UserProfile): Promise
         source: { type: Type.STRING },
         category: { type: Type.STRING },
         description: { type: Type.STRING },
+        jobType: { type: Type.STRING, enum: ["Internship", "Full-time"] },
       },
-      required: ["title", "company", "location", "postedDate", "daysAgo", "url", "category"],
+      required: ["title", "company", "location", "postedDate", "daysAgo", "url", "category", "jobType"],
     },
   };
 
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
+    model: "gemini-3-flash-preview",
     contents: prompt,
     config: {
       tools: [{ googleSearch: {} }],
@@ -176,8 +226,30 @@ export const findInternshipOpportunities = async (profile: UserProfile): Promise
 
 export const getQuickTip = async (topic: string): Promise<string> => {
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash-lite",
+    model: "gemini-flash-lite-latest",
     contents: `One short unconventional tip for: ${topic}. Max 15 words.`,
   });
   return response.text || "Network early.";
+};
+
+/**
+ * TTS implementation using gemini-2.5-flash-preview-tts
+ */
+export const generateSpeech = async (text: string): Promise<string> => {
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash-preview-tts",
+    contents: [{ parts: [{ text: `Say encouragingly as a college mentor: ${text}` }] }],
+    config: {
+      responseModalities: [Modality.AUDIO],
+      speechConfig: {
+        voiceConfig: {
+          prebuiltVoiceConfig: { voiceName: 'Kore' }, // Warm, helpful voice
+        },
+      },
+    },
+  });
+
+  const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+  if (!base64Audio) throw new Error("No audio returned from TTS");
+  return base64Audio;
 };

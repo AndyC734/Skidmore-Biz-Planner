@@ -1,7 +1,9 @@
+
 import React, { useState, useEffect } from 'react';
 import { UserProfile, InternshipPlan } from '../types';
-import { generateInternshipPlan, getQuickTip } from '../services/geminiService';
-import { Loader2, Calendar, CheckCircle2, Briefcase, Sparkles } from 'lucide-react';
+import { generateInternshipPlan, getQuickTip, generateSpeech } from '../services/geminiService';
+import { playRawAudio } from '../services/audioHelper';
+import { Loader2, Calendar, CheckCircle2, Briefcase, Sparkles, Volume2 } from 'lucide-react';
 
 interface Props {
   profile: UserProfile;
@@ -11,6 +13,7 @@ const Dashboard: React.FC<Props> = ({ profile }) => {
   const [plan, setPlan] = useState<InternshipPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [quickTip, setQuickTip] = useState<string>("");
+  const [speaking, setSpeaking] = useState(false);
 
   useEffect(() => {
     const fetchPlan = async () => {
@@ -26,12 +29,23 @@ const Dashboard: React.FC<Props> = ({ profile }) => {
       }
     };
     fetchPlan();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run once on mount
+  }, []);
+
+  const handleSpeak = async (text: string) => {
+    if (speaking) return;
+    setSpeaking(true);
+    try {
+      const audioBase64 = await generateSpeech(text);
+      await playRawAudio(audioBase64);
+    } catch (error) {
+      console.error("Speech failed", error);
+    } finally {
+      setSpeaking(false);
+    }
+  };
 
   return (
     <div className="space-y-8 animate-fade-in">
-      {/* Header Section - Always visible to show User Profile Info */}
       <div className="bg-emerald-900 text-white p-6 rounded-xl shadow-lg relative overflow-hidden transition-all duration-500">
         <div className="relative z-10">
           <div className="flex justify-between items-start">
@@ -39,6 +53,16 @@ const Dashboard: React.FC<Props> = ({ profile }) => {
                  <h1 className="text-2xl font-bold mb-1">Career Strategy & Coaching</h1>
                  <p className="text-emerald-200 text-sm mb-4">Your personalized roadmap for {profile.classYear}.</p>
             </div>
+            {plan && (
+              <button 
+                onClick={() => handleSpeak(`${plan.summary}. Coach tip: ${quickTip}`)}
+                className={`p-2 rounded-full bg-white/10 hover:bg-white/20 transition-all ${speaking ? 'animate-pulse' : ''}`}
+                title="Listen to Strategy"
+                disabled={speaking}
+              >
+                <Volume2 className={`w-5 h-5 ${speaking ? 'text-yellow-400' : 'text-white'}`} />
+              </button>
+            )}
           </div>
          
           <p className="opacity-90 max-w-2xl min-h-[1.5em] font-light">
@@ -74,7 +98,6 @@ const Dashboard: React.FC<Props> = ({ profile }) => {
         </div>
       ) : plan ? (
         <>
-          {/* Target Roles */}
           <section className="animate-fade-in" style={{animationDelay: '0.1s'}}>
             <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
               <Briefcase className="mr-2 h-5 w-5 text-emerald-600" /> Recommended Roles
@@ -88,7 +111,6 @@ const Dashboard: React.FC<Props> = ({ profile }) => {
             </div>
           </section>
 
-          {/* Timeline */}
           <section className="animate-fade-in" style={{animationDelay: '0.2s'}}>
             <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
               <Calendar className="mr-2 h-5 w-5 text-emerald-600" /> Your {profile.classYear} Roadmap
@@ -122,7 +144,6 @@ const Dashboard: React.FC<Props> = ({ profile }) => {
             </div>
           </section>
 
-          {/* Action Steps */}
           <section className="animate-fade-in" style={{animationDelay: '0.3s'}}>
             <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
               <CheckCircle2 className="mr-2 h-5 w-5 text-emerald-600" /> Immediate Actions (Skidmore Specific)

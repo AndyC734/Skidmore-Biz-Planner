@@ -1,7 +1,8 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, User, Sparkles } from 'lucide-react';
-import { chatWithCoach } from '../services/geminiService';
+import { Send, Sparkles, Volume2 } from 'lucide-react';
+import { chatWithCoach, generateSpeech } from '../services/geminiService';
+import { playRawAudio } from '../services/audioHelper';
 import ReactMarkdown from 'react-markdown';
 
 const ChatBot: React.FC = () => {
@@ -10,6 +11,7 @@ const ChatBot: React.FC = () => {
   ]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [speakingId, setSpeakingId] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -41,6 +43,19 @@ const ChatBot: React.FC = () => {
     }
   };
 
+  const handleSpeak = async (text: string, id: number) => {
+    if (speakingId !== null) return;
+    setSpeakingId(id);
+    try {
+      const audioBase64 = await generateSpeech(text.substring(0, 500)); // Limit for speed
+      await playRawAudio(audioBase64);
+    } catch (error) {
+      console.error("Speech failed", error);
+    } finally {
+      setSpeakingId(null);
+    }
+  };
+
   return (
     <div className="bg-white rounded-xl shadow-lg border border-gray-200 h-[600px] flex flex-col overflow-hidden">
         <div className="bg-emerald-600 p-4 text-white flex items-center gap-2">
@@ -51,13 +66,22 @@ const ChatBot: React.FC = () => {
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
         {messages.map((msg, idx) => (
           <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[80%] rounded-2xl p-4 ${
+            <div className={`max-w-[80%] rounded-2xl p-4 relative ${
               msg.role === 'user' 
                 ? 'bg-emerald-600 text-white rounded-br-none' 
                 : 'bg-white border border-gray-200 text-gray-800 rounded-bl-none shadow-sm'
             }`}>
+              {msg.role === 'model' && (
+                <button 
+                  onClick={() => handleSpeak(msg.content, idx)}
+                  disabled={speakingId !== null}
+                  className={`absolute -top-2 -left-2 p-1.5 rounded-full bg-white border border-indigo-100 shadow-sm transition-all hover:scale-110 ${speakingId === idx ? 'text-emerald-600 animate-pulse' : 'text-gray-400'}`}
+                >
+                  <Volume2 className="w-3.5 h-3.5" />
+                </button>
+              )}
               {msg.role === 'model' ? (
-                <div className="prose prose-sm max-w-none text-gray-800">
+                <div className="prose prose-sm max-w-none text-gray-800 pt-1">
                     <ReactMarkdown>{msg.content}</ReactMarkdown>
                 </div>
               ) : (

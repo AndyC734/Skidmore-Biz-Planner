@@ -1,5 +1,5 @@
 {
-  "name": "Skidmore Biz Class-Year Internship Planner",
+  "name": "Skidmore Career Planner",
   "description": "A tailored internship guide for Skidmore College business majors. Generates 12-16 week plans, analyzes resumes, and tracks progress based on class year and concentration.",
   "requestFramePermissions": [
     "camera",

@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import OnboardingForm from './components/OnboardingForm';
 import Dashboard from './components/Dashboard';
@@ -5,12 +6,13 @@ import ResumeAnalyzer from './components/ResumeAnalyzer';
 import ChatBot from './components/ChatBot';
 import Tools from './components/Tools';
 import JobFinder from './components/JobFinder';
+import AlumniConnect from './components/AlumniConnect';
 import { UserProfile } from './types';
-import { LayoutDashboard, MessageSquare, FileText, Search, GraduationCap, Briefcase } from 'lucide-react';
+import { LayoutDashboard, MessageSquare, FileText, Search, GraduationCap, Briefcase, Users } from 'lucide-react';
 
 const App: React.FC = () => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [currentView, setCurrentView] = useState<'dashboard' | 'jobs' | 'chat' | 'resume' | 'tools'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'jobs' | 'chat' | 'resume' | 'tools' | 'alumni'>('dashboard');
 
   if (!profile) {
     return (
@@ -21,7 +23,7 @@ const App: React.FC = () => {
               <GraduationCap className="w-10 h-10 text-yellow-400" />
             </div>
           </div>
-          <h1 className="text-3xl font-extrabold text-gray-900">Skidmore Biz Planner</h1>
+          <h1 className="text-3xl font-extrabold text-gray-900">Skidmore Career Planner</h1>
           <p className="text-gray-600">Your AI-powered class-year internship roadmap.</p>
         </div>
         <OnboardingForm onComplete={setProfile} />
@@ -36,7 +38,7 @@ const App: React.FC = () => {
         <div className="p-6 hidden md:block">
            <div className="flex items-center gap-2 mb-6">
              <GraduationCap className="w-8 h-8 text-yellow-400" />
-             <span className="font-bold text-white text-lg tracking-tight">BizPlanner</span>
+             <span className="font-bold text-white text-lg tracking-tight">CareerPlanner</span>
            </div>
            <p className="text-xs text-emerald-300 uppercase tracking-wider font-semibold mb-2">Your Space</p>
         </div>
@@ -56,6 +58,14 @@ const App: React.FC = () => {
           >
             <Briefcase className="w-5 h-5 md:mr-3" />
             <span className="hidden md:block">Find Jobs</span>
+          </button>
+
+          <button 
+            onClick={() => setCurrentView('alumni')}
+            className={`flex items-center p-3 rounded-lg transition-colors ${currentView === 'alumni' ? 'bg-emerald-800 text-white shadow-md' : 'hover:bg-emerald-800/50'}`}
+          >
+            <Users className="w-5 h-5 md:mr-3" />
+            <span className="hidden md:block">Alumni Connect</span>
           </button>
           
           <button 
@@ -93,6 +103,7 @@ const App: React.FC = () => {
         <div className="max-w-5xl mx-auto">
           {currentView === 'dashboard' && <Dashboard profile={profile} />}
           {currentView === 'jobs' && <JobFinder profile={profile} />}
+          {currentView === 'alumni' && <AlumniConnect profile={profile} />}
           {currentView === 'tools' && <Tools profile={profile} />}
           {currentView === 'resume' && <ResumeAnalyzer profile={profile} />}
           {currentView === 'chat' && <ChatBot />}
